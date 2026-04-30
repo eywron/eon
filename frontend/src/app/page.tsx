@@ -12,12 +12,6 @@ type ChatMessage = {
   created_at?: string;
 };
 
-const quickPrompts = [
-  "Summarize my priorities for today.",
-  "What should I focus on this week?",
-  "Remember that I prefer concise replies.",
-];
-
 export default function Home() {
   const [session, setSession] = useState<Session | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -75,8 +69,10 @@ export default function Home() {
   }, [messages, isLoading]);
 
   const greeting = useMemo(() => {
-    if (!session?.user?.email) return "Welcome back.";
-    return `Welcome back, ${session.user.email.split("@")[0]}.`;
+    if (!session?.user?.email) {
+      return "Your private chat";
+    }
+    return `Your private chat, ${session.user.email.split("@")[0]}`;
   }, [session]);
 
   const handleSignIn = async () => {
@@ -141,10 +137,6 @@ export default function Home() {
     }
   };
 
-  const handlePromptPick = (prompt: string) => {
-    setInput(prompt);
-  };
-
   return (
     <div className="relative flex min-h-screen flex-col px-4 py-6 text-white sm:px-8 lg:px-12">
       <div className="absolute inset-0 -z-10">
@@ -153,12 +145,10 @@ export default function Home() {
         <div className="pointer-events-none absolute bottom-0 left-1/3 h-64 w-64 rounded-full bg-rose-300/10 blur-[130px]" />
       </div>
 
-      <header className="flex items-center justify-between">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between animate-fade-up">
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-white/60">
-            Personal AI Assistant
-          </p>
-          <h1 className="font-display text-3xl sm:text-4xl">Eon</h1>
+          <p className="text-xs uppercase tracking-[0.3em] text-white/50">Eon</p>
+          <h1 className="font-display text-3xl sm:text-4xl">{greeting}</h1>
         </div>
         <div className="flex items-center gap-3">
           {isAuthed ? (
@@ -181,65 +171,13 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="mt-8 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-black/30 backdrop-blur">
-          <div className="flex flex-col gap-2">
-            <p className="text-sm text-white/60">{greeting}</p>
-            <h2 className="font-display text-2xl">Memory-first conversations.</h2>
-            <p className="text-sm text-white/70">
-              Every message updates structured and semantic memory so your
-              assistant keeps the context that matters.
-            </p>
-          </div>
-
-          <div className="mt-6 flex flex-wrap gap-3">
-            {quickPrompts.map((prompt) => (
-              <button
-                key={prompt}
-                className="rounded-full border border-white/20 px-4 py-2 text-xs text-white/70 transition hover:border-white/40 hover:text-white"
-                onClick={() => handlePromptPick(prompt)}
-              >
-                {prompt}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/10 via-white/5 to-white/0 p-6">
-          <h3 className="font-display text-xl">Session pulse</h3>
-          <div className="mt-4 space-y-4 text-sm text-white/70">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <p className="text-xs uppercase tracking-wide text-white/50">
-                Status
-              </p>
-              <p className="mt-2 text-base text-white">
-                {!isSupabaseConfigured
-                  ? "Waiting for Supabase configuration."
-                  : isAuthed
-                  ? "Connected. Memory sync is active."
-                  : "Sign in to activate memory sync."}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <p className="text-xs uppercase tracking-wide text-white/50">
-                Memory layers
-              </p>
-              <p className="mt-2">
-                Structured memory, semantic recall, and recent chat history are
-                injected into every response.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="mt-8 flex min-h-[420px] flex-1 flex-col rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
+      <section className="mt-8 flex min-h-[420px] flex-1 flex-col rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur animate-fade-up-delay">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-white/50">
-              Live Thread
+              Conversation
             </p>
-            <h3 className="font-display text-2xl">Conversation</h3>
+            <h3 className="font-display text-2xl">Chat</h3>
           </div>
           <span className="text-xs text-white/60">
             {messages.length} message{messages.length === 1 ? "" : "s"}
@@ -253,7 +191,7 @@ export default function Home() {
           {!isAuthed && (
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-white/70">
               {isSupabaseConfigured
-                ? "Sign in to start a personalized conversation with memory."
+                ? "Sign in to start chatting."
                 : "Add Supabase env vars to enable authentication."}
             </div>
           )}
@@ -267,7 +205,16 @@ export default function Home() {
                   : "mr-auto w-full max-w-[70%] rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white"
               }
             >
-              <p className="leading-6">{message.content}</p>
+              <p
+                className={
+                  message.role === "user"
+                    ? "text-[11px] uppercase tracking-[0.3em] text-black/40"
+                    : "text-[11px] uppercase tracking-[0.3em] text-white/50"
+                }
+              >
+                {message.role === "user" ? "You" : "Eon"}
+              </p>
+              <p className="mt-2 leading-6">{message.content}</p>
               {message.created_at && (
                 <p
                   className={
@@ -287,7 +234,7 @@ export default function Home() {
 
           {isLoading && (
             <div className="mr-auto w-full max-w-[60%] rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white/70">
-              Thinking through your memory layers...
+              Eon is thinking...
             </div>
           )}
         </div>
@@ -299,9 +246,7 @@ export default function Home() {
           <textarea
             className="min-h-[90px] w-full resize-none rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-amber-300/40"
             placeholder={
-              isAuthed
-                ? "Tell Eon what you need..."
-                : "Sign in to start chatting"
+              isAuthed ? "Message Eon..." : "Sign in to start chatting"
             }
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -311,9 +256,7 @@ export default function Home() {
             {error ? (
               <p className="text-xs text-rose-200">{error}</p>
             ) : (
-              <p className="text-xs text-white/50">
-                Messages are saved to your personal memory store.
-              </p>
+              <span />
             )}
             <button
               type="submit"
