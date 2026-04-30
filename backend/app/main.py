@@ -10,7 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from supabase import Client, create_client
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 
 SYSTEM_PROMPT = """
@@ -70,14 +71,18 @@ def get_supabase() -> Client:
 
 @lru_cache
 def get_genai_config() -> dict[str, str]:
+    return {
+        "chat_model": os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
+        "embed_model": os.getenv("GEMINI_EMBED_MODEL", "gemini-embedding-001"),
+    }
+
+
+@lru_cache
+def get_genai_client() -> genai.Client:
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY is required")
-    genai.configure(api_key=api_key)
-    return {
-        "chat_model": os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
-        "embed_model": os.getenv("GEMINI_EMBED_MODEL", "models/text-embedding-004"),
-    }
+    return genai.Client(api_key=api_key)
 
 
 def extract_access_token(authorization: str | None) -> str:
@@ -105,14 +110,35 @@ def upsert_user(supabase: Client, user_id: str, email: str) -> None:
     ).execute()
 
 
+def extract_embedding_values(response: Any) -> list[float]:
+    embeddings = getattr(response, "embeddings", None)
+    if embeddings:
+        first = embeddings[0]
+        values = getattr(first, "values", None)
+        if values is not None:
+            return list(values)
+        if isinstance(first, dict) and "values" in first:
+            return list(first["values"])
+
+    embedding = getattr(response, "embedding", None)
+    if embedding is not None:
+        values = getattr(embedding, "values", None)
+        if values is not None:
+            return list(values)
+        if isinstance(embedding, dict) and "values" in embedding:
+            return list(embedding["values"])
+
+    raise RuntimeError("Embedding response is missing values")
+
+
 def embed_text(text: str) -> list[float]:
     config = get_genai_config()
-    response = genai.embed_content(
+    client = get_genai_client()
+    response = client.models.embed_content(
         model=config["embed_model"],
-        content=text,
-        task_type="retrieval_query",
+        contents=text,
     )
-    return response["embedding"]
+    return extract_embedding_values(response)
 
 
 def fetch_structured_memory(supabase: Client, user_id: str) -> list[dict[str, Any]]:
@@ -189,11 +215,12 @@ def build_prompt(
 
 def generate_reply(prompt: str) -> str:
     config = get_genai_config()
-    model = genai.GenerativeModel(
-        model_name=config["chat_model"],
-        system_instruction=SYSTEM_PROMPT,
+    client = get_genai_client()
+    response = client.models.generate_content(
+        model=config["chat_model"],
+        contents=prompt,
+        config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT),
     )
-    response = model.generate_content(prompt)
     return (response.text or "").strip()
 
 
@@ -212,16 +239,20 @@ def safe_json_loads(raw_text: str) -> dict[str, Any] | None:
 
 def extract_memory(user_message: str, assistant_reply: str) -> dict[str, Any]:
     config = get_genai_config()
-    model = genai.GenerativeModel(
-        model_name=config["chat_model"],
-        system_instruction=MEMORY_EXTRACTION_PROMPT,
-    )
+    client = get_genai_client()
     prompt = (
         f"User message: {user_message}\n"
         f"Assistant reply: {assistant_reply}\n"
         "Return JSON only."
     )
-    response = model.generate_content(prompt)
+    response = client.models.generate_content(
+        model=config["chat_model"],
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=MEMORY_EXTRACTION_PROMPT,
+            response_mime_type="application/json",
+        ),
+    )
     parsed = safe_json_loads((response.text or "").strip())
     if not parsed or not parsed.get("should_store"):
         return {"should_store": False}
