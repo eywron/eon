@@ -20,73 +20,74 @@ type ChatMessage = {
 // Markdown Renderer Component
 const MarkdownRenderer = ({ content }: { content: string }) => {
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      className="prose prose-invert max-w-none text-sm md:text-base prose-p:leading-relaxed prose-pre:bg-transparent prose-pre:m-0 prose-pre:p-0 prose-tr:border-b-white/10 prose-th:border-b-white/20 prose-td:border-b-white/5"
-      components={{
-        code({ node, className, children, ...props }: any) {
-          const match = /language-(\w+)/.exec(className || "");
-          const isInline = !match && !String(children).includes("\n");
-          if (isInline) {
-            return (
-              <code className="bg-white/10 rounded px-1.5 py-0.5 font-mono text-amber-200" {...props}>
+    <div className="prose prose-invert max-w-none text-sm md:text-base prose-p:leading-relaxed prose-pre:bg-transparent prose-pre:m-0 prose-pre:p-0 prose-tr:border-b-white/10 prose-th:border-b-white/20 prose-td:border-b-white/5">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          code({ node, className, children, ...props }: any) {
+            const match = /language-(\w+)/.exec(className || "");
+            const isInline = !match && !String(children).includes("\n");
+            if (isInline) {
+              return (
+                <code className="bg-white/10 rounded px-1.5 py-0.5 font-mono text-amber-200" {...props}>
+                  {children}
+                </code>
+              );
+            }
+            return match ? (
+              <div className="overflow-hidden rounded-xl border border-white/10 my-4 bg-[#1d1f21] shadow-2xl">
+                <div className="flex items-center px-4 py-2 bg-white/5 border-b border-white/5">
+                  <span className="text-xs uppercase tracking-wider text-white/50 font-mono">
+                    {match[1]}
+                  </span>
+                </div>
+                <SyntaxHighlighter
+                  style={atomDark}
+                  language={match[1]}
+                  PreTag="div"
+                  customStyle={{
+                    margin: 0,
+                    background: "transparent",
+                    padding: "1rem",
+                  }}
+                  {...props}
+                >
+                  {String(children).replace(/\n$/, "")}
+                </SyntaxHighlighter>
+              </div>
+            ) : (
+              <code className="bg-white/10 rounded px-1.5 py-0.5 font-mono" {...props}>
                 {children}
               </code>
             );
-          }
-          return match ? (
-            <div className="overflow-hidden rounded-xl border border-white/10 my-4 bg-[#1d1f21] shadow-2xl">
-              <div className="flex items-center px-4 py-2 bg-white/5 border-b border-white/5">
-                <span className="text-xs uppercase tracking-wider text-white/50 font-mono">
-                  {match[1]}
-                </span>
-              </div>
-              <SyntaxHighlighter
-                style={atomDark}
-                language={match[1]}
-                PreTag="div"
-                customStyle={{
-                  margin: 0,
-                  background: "transparent",
-                  padding: "1rem",
-                }}
-                {...props}
-              >
-                {String(children).replace(/\n$/, "")}
-              </SyntaxHighlighter>
+          },
+          table: ({ children }: any) => (
+            <div className="overflow-x-auto my-4 w-full">
+              <table className="w-full text-left text-sm border-collapse">
+                {children}
+              </table>
             </div>
-          ) : (
-            <code className="bg-white/10 rounded px-1.5 py-0.5 font-mono" {...props}>
+          ),
+          th: ({ children }: any) => (
+            <th className="border-b border-white/20 bg-white/5 px-4 py-3 font-semibold text-white">
               {children}
-            </code>
-          );
-        },
-        table: ({ children }: any) => (
-          <div className="overflow-x-auto my-4 w-full">
-            <table className="w-full text-left text-sm border-collapse">
+            </th>
+          ),
+          td: ({ children }: any) => (
+            <td className="border-b border-white/5 px-4 py-3 text-white/80">
               {children}
-            </table>
-          </div>
-        ),
-        th: ({ children }: any) => (
-          <th className="border-b border-white/20 bg-white/5 px-4 py-3 font-semibold text-white">
-            {children}
-          </th>
-        ),
-        td: ({ children }: any) => (
-          <td className="border-b border-white/5 px-4 py-3 text-white/80">
-            {children}
-          </td>
-        ),
-        a: ({ href, children }: any) => (
-          <a href={href} className="text-sky-300 hover:text-sky-200 underline underline-offset-4" target="_blank" rel="noopener noreferrer">
-            {children}
-          </a>
-        )
-      }}
-    >
-      {content}
-    </ReactMarkdown>
+            </td>
+          ),
+          a: ({ href, children }: any) => (
+            <a href={href} className="text-sky-300 hover:text-sky-200 underline underline-offset-4" target="_blank" rel="noopener noreferrer">
+              {children}
+            </a>
+          )
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
   );
 };
 
