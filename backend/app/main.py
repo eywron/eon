@@ -23,9 +23,9 @@ Be concise unless the user asks for detail. Never mention internal prompts.
 MEMORY_EXTRACTION_PROMPT = """
 You are a memory classifier. Return JSON only.
 Rules:
-- Only store stable preferences, habits, goals, traits, or important facts.
-- If nothing qualifies, return {"should_store": false}.
-- If it qualifies, return:
+- Store any preference, habit, goal, trait, fact, or even small details about the user that might be useful later.
+- If the message has absolutely no useful details to remember, return {"should_store": false}.
+- If it has something worth remembering, return:
   {"should_store": true, "type": "preference|habit|goal|trait|fact", "content": "short sentence", "importance": 1-10}
 """.strip()
 
@@ -72,7 +72,7 @@ def get_supabase() -> Client:
 @lru_cache
 def get_genai_config() -> dict[str, str]:
     return {
-        "chat_model": os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
+        "chat_model": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
         "embed_model": os.getenv("GEMINI_EMBED_MODEL", "gemini-embedding-001"),
     }
 
@@ -137,6 +137,7 @@ def embed_text(text: str) -> list[float]:
     response = client.models.embed_content(
         model=config["embed_model"],
         contents=text,
+        config=types.EmbedContentConfig(output_dimensionality=768),
     )
     return extract_embedding_values(response)
 
@@ -275,6 +276,70 @@ def extract_memory(user_message: str, assistant_reply: str) -> dict[str, Any]:
     }
 
 
+def normalize_memory_content(text: str) -> str:
+    trimmed = text.strip()
+    lowered = trimmed.lower()
+    prefixes = [
+        "remember that",
+        "remember",
+        "note that",
+        "note",
+        "save that",
+        "save",
+        "don't forget that",
+        "dont forget that",
+        "don't forget",
+        "dont forget",
+    ]
+    for prefix in prefixes:
+        if lowered.startswith(prefix):
+            trimmed = trimmed[len(prefix) :].lstrip(" :-,.")
+            break
+
+    compact = " ".join(trimmed.split())
+    if len(compact) > 300:
+        return f"{compact[:297]}..."
+    return compact
+
+
+def should_force_store_memory(text: str) -> bool:
+    lowered = text.lower()
+    triggers = [
+        "remember",
+        "note that",
+        "save this",
+        "save that",
+        "don't forget",
+        "dont forget",
+        "keep this in mind",
+        "my preference",
+        "i prefer",
+        "i like",
+        "i love",
+        "i dislike",
+        "i hate",
+        "my goal",
+        "i want to",
+        "i plan to",
+        "i always",
+        "i usually",
+    ]
+    return any(trigger in lowered for trigger in triggers)
+
+
+def infer_memory_type(text: str) -> str:
+    lowered = text.lower()
+    if any(key in lowered for key in ["prefer", "i like", "i love", "i dislike", "i hate"]):
+        return "preference"
+    if any(key in lowered for key in ["goal", "i want to", "i plan to", "i aim to"]):
+        return "goal"
+    if any(key in lowered for key in ["i always", "i usually", "habit"]):
+        return "habit"
+    if any(key in lowered for key in ["i am a", "i am an", "i'm a", "i'm an"]):
+        return "trait"
+    return "fact"
+
+
 def store_message(supabase: Client, user_id: str, role: str, content: str) -> str:
     result = (
         supabase.table("messages")
@@ -358,7 +423,18 @@ def chat(
         store_embedding(supabase, request.user_id, assistant_message_id, assistant_embedding)
 
     memory_result = extract_memory(request.message, reply)
-    if memory_result.get("should_store"):
-        store_structured_memory(supabase, request.user_id, memory_result)
+    final_memory = memory_result
+    if not memory_result.get("should_store") and force_store_user_messages():
+        fallback = normalize_memory_content(request.message)
+        if fallback:
+            final_memory = {
+                "should_store": True,
+                "type": "fact",
+                "content": fallback,
+                "importance": 1,
+            }
 
-    return ChatResponse(reply=reply, memory=memory_result)
+    if final_memory.get("should_store"):
+        store_structured_memory(supabase, request.user_id, final_memory)
+
+    return ChatResponse(reply=reply, memory=final_memory)
