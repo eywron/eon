@@ -424,7 +424,7 @@ def chat(
 
     memory_result = extract_memory(request.message, reply)
     final_memory = memory_result
-    if not memory_result.get("should_store") and force_store_user_messages():
+    if not memory_result.get("should_store") and should_force_store_memory(request.message):
         fallback = normalize_memory_content(request.message)
         if fallback:
             final_memory = {
